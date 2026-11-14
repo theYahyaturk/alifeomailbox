@@ -325,22 +325,33 @@ app.get('/api/emails/:id/attachments/:attId', async (c) => {
     return c.text('Attachment not found', 404);
   }
 
-  if (!c.env.ATTACHMENTS_BUCKET) {
-    return c.text('Attachment storage is not configured', 404);
+  // 1. Deliver directly from D1 database storage if present
+  if (attachment.data) {
+    const binaryString = atob(attachment.data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const headers = new Headers();
+    headers.set('Content-Type', attachment.content_type || 'application/octet-stream');
+    headers.set('Content-Disposition', `inline; filename="${attachment.filename}"`);
+    return new Response(bytes.buffer, { headers });
   }
 
-  const object = await c.env.ATTACHMENTS_BUCKET.get(attachment.r2_key);
-  if (!object) {
-    return c.text('File not found in storage', 404);
+  // 2. Fallback to R2 bucket if configured
+  if (c.env.ATTACHMENTS_BUCKET && attachment.r2_key) {
+    const object = await c.env.ATTACHMENTS_BUCKET.get(attachment.r2_key);
+    if (object) {
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+      headers.set('Content-Type', attachment.content_type || 'application/octet-stream');
+      headers.set('Content-Disposition', `inline; filename="${attachment.filename}"`);
+      headers.set('etag', object.httpEtag);
+      return new Response(object.body, { headers });
+    }
   }
 
-  const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  headers.set('Content-Type', attachment.content_type || 'application/octet-stream');
-  headers.set('Content-Disposition', `inline; filename="${attachment.filename}"`);
-  headers.set('etag', object.httpEtag);
-
-  return new Response(object.body, { headers });
+  return c.text('Attachment storage is not configured', 404);
 });
 
 // Stream Raw .EML from R2
@@ -440,9 +451,9 @@ app.post('/api/emails/send', async (c) => {
       }
 
       await c.env.DB.prepare(`
-        INSERT INTO attachments (id, email_id, filename, content_type, size, r2_key, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).bind(attId, emailId, att.filename, att.content_type || 'application/octet-stream', bytes.length, r2Key, now).run();
+        INSERT INTO attachments (id, email_id, filename, content_type, size, r2_key, data, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(attId, emailId, att.filename, att.content_type || 'application/octet-stream', bytes.length, r2Key, att.content, now).run();
     }
   }
 

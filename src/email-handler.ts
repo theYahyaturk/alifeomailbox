@@ -59,7 +59,7 @@ export async function handleIncomingEmail(
     const hasAttachments = parsed.attachments && parsed.attachments.length > 0 ? 1 : 0;
     const threadId = parsed.messageId || emailId;
 
-    // 4. Process attachments (save to R2 if bucket exists)
+    // 4. Process attachments (save to D1 data column & R2 if bucket exists)
     if (parsed.attachments && parsed.attachments.length > 0) {
       for (const att of parsed.attachments) {
         const attachmentId = crypto.randomUUID();
@@ -67,12 +67,29 @@ export async function handleIncomingEmail(
         const r2Key = `attachments/${emailId}/${attachmentId}_${safeFilename}`;
         const contentType = att.mimeType || 'application/octet-stream';
         let size = 0;
+        let base64Content: string | null = null;
+
         if (typeof att.content === 'string') {
           size = new TextEncoder().encode(att.content).length;
+          base64Content = btoa(att.content);
         } else if (att.content instanceof Uint8Array) {
           size = att.content.byteLength;
+          let binary = '';
+          const bytes = att.content;
+          const len = bytes.byteLength;
+          for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          base64Content = btoa(binary);
         } else if (att.content && 'byteLength' in att.content) {
-          size = (att.content as ArrayBuffer).byteLength;
+          const bytes = new Uint8Array(att.content as ArrayBuffer);
+          size = bytes.byteLength;
+          let binary = '';
+          const len = bytes.byteLength;
+          for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          base64Content = btoa(binary);
         }
 
         if (env.ATTACHMENTS_BUCKET) {
@@ -86,8 +103,8 @@ export async function handleIncomingEmail(
         }
 
         await env.DB.prepare(`
-          INSERT INTO attachments (id, email_id, filename, content_type, size, r2_key, content_id, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO attachments (id, email_id, filename, content_type, size, r2_key, content_id, data, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           attachmentId,
           emailId,
@@ -96,6 +113,7 @@ export async function handleIncomingEmail(
           size,
           r2Key,
           att.contentId || null,
+          base64Content,
           now
         ).run();
       }

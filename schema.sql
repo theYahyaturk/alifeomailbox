@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS attachments (
     size INTEGER NOT NULL,
     r2_key TEXT NOT NULL,
     content_id TEXT,
+    data TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
