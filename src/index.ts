@@ -430,34 +430,7 @@ app.post('/api/emails/send', async (c) => {
   const snippet = (payload.text || '').replace(/\s+/g, ' ').slice(0, 160);
   const hasAttachments = payload.attachments && payload.attachments.length > 0 ? 1 : 0;
 
-  // Save attachments to R2 & DB if present
-  if (payload.attachments && payload.attachments.length > 0) {
-    for (const att of payload.attachments) {
-      const attId = crypto.randomUUID();
-      const safeFilename = att.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const r2Key = `attachments/${emailId}/${attId}_${safeFilename}`;
-      
-      // Decode Base64 to binary
-      const binaryString = atob(att.content);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-
-      if (c.env.ATTACHMENTS_BUCKET) {
-        await c.env.ATTACHMENTS_BUCKET.put(r2Key, bytes.buffer, {
-          httpMetadata: { contentType: att.content_type || 'application/octet-stream' }
-        });
-      }
-
-      await c.env.DB.prepare(`
-        INSERT INTO attachments (id, email_id, filename, content_type, size, r2_key, data, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(attId, emailId, att.filename, att.content_type || 'application/octet-stream', bytes.length, r2Key, att.content, now).run();
-    }
-  }
-
-  // Save to emails table in 'sent' folder
+  // 1. FIRST save to emails table in 'sent' folder (Parent record MUST exist before attachments!)
   await c.env.DB.prepare(`
     INSERT INTO emails (
       id, message_id, thread_id, direction, folder,
@@ -482,6 +455,42 @@ app.post('/api/emails/send', async (c) => {
     hasAttachments,
     now
   ).run();
+
+  // 2. THEN save attachments to R2 & DB if present
+  if (payload.attachments && payload.attachments.length > 0) {
+    for (const att of payload.attachments) {
+      try {
+        const attId = crypto.randomUUID();
+        const safeFilename = att.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const r2Key = `attachments/${emailId}/${attId}_${safeFilename}`;
+        const cleanBase64 = att.content.replace(/^data:[^;]+;base64,/, '').trim();
+        
+        // Decode Base64 to binary
+        const binaryString = atob(cleanBase64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        if (c.env.ATTACHMENTS_BUCKET) {
+          try {
+            await c.env.ATTACHMENTS_BUCKET.put(r2Key, bytes.buffer, {
+              httpMetadata: { contentType: att.content_type || 'application/octet-stream' }
+            });
+          } catch (r2Err) {
+            console.warn('[R2 Warning on send]', r2Err);
+          }
+        }
+
+        await c.env.DB.prepare(`
+          INSERT INTO attachments (id, email_id, filename, content_type, size, r2_key, data, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(attId, emailId, att.filename, att.content_type || 'application/octet-stream', bytes.length, r2Key, cleanBase64, now).run();
+      } catch (attErr) {
+        console.error('[Error saving outbound attachment]', attErr);
+      }
+    }
+  }
 
   return c.json({
     success: true,

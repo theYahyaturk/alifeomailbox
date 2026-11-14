@@ -59,67 +59,7 @@ export async function handleIncomingEmail(
     const hasAttachments = parsed.attachments && parsed.attachments.length > 0 ? 1 : 0;
     const threadId = parsed.messageId || emailId;
 
-    // 4. Process attachments (save to D1 data column & R2 if bucket exists)
-    if (parsed.attachments && parsed.attachments.length > 0) {
-      for (const att of parsed.attachments) {
-        const attachmentId = crypto.randomUUID();
-        const safeFilename = (att.filename || 'attachment').replace(/[^a-zA-Z0-9._-]/g, '_');
-        const r2Key = `attachments/${emailId}/${attachmentId}_${safeFilename}`;
-        const contentType = att.mimeType || 'application/octet-stream';
-        let size = 0;
-        let base64Content: string | null = null;
-
-        if (typeof att.content === 'string') {
-          size = new TextEncoder().encode(att.content).length;
-          base64Content = btoa(att.content);
-        } else if (att.content instanceof Uint8Array) {
-          size = att.content.byteLength;
-          let binary = '';
-          const bytes = att.content;
-          const len = bytes.byteLength;
-          for (let i = 0; i < len; i++) {
-            binary += String.fromCharCode(bytes[i]);
-          }
-          base64Content = btoa(binary);
-        } else if (att.content && 'byteLength' in att.content) {
-          const bytes = new Uint8Array(att.content as ArrayBuffer);
-          size = bytes.byteLength;
-          let binary = '';
-          const len = bytes.byteLength;
-          for (let i = 0; i < len; i++) {
-            binary += String.fromCharCode(bytes[i]);
-          }
-          base64Content = btoa(binary);
-        }
-
-        if (env.ATTACHMENTS_BUCKET) {
-          try {
-            await env.ATTACHMENTS_BUCKET.put(r2Key, att.content, {
-              httpMetadata: { contentType }
-            });
-          } catch (r2AttErr) {
-            console.warn(`[R2 Warning] Could not save attachment ${safeFilename}:`, r2AttErr);
-          }
-        }
-
-        await env.DB.prepare(`
-          INSERT INTO attachments (id, email_id, filename, content_type, size, r2_key, content_id, data, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          attachmentId,
-          emailId,
-          att.filename || 'attachment',
-          contentType,
-          size,
-          r2Key,
-          att.contentId || null,
-          base64Content,
-          now
-        ).run();
-      }
-    }
-
-    // 5. Ensure recipient alias exists for user filtering
+    // 4. Ensure recipient alias exists for user filtering
     const matchingUser = await env.DB.prepare('SELECT id FROM users WHERE email = ? LIMIT 1').bind(recipientEmail).first<{ id: string }>();
     const targetUser = matchingUser || await env.DB.prepare('SELECT id FROM users WHERE role = "admin" LIMIT 1').first<{ id: string }>();
     if (targetUser) {
@@ -135,7 +75,7 @@ export async function handleIncomingEmail(
       }
     }
 
-    // 6. Save email into D1 emails table
+    // 5. FIRST Save email into D1 emails table (parent record MUST exist for foreign keys!)
     await env.DB.prepare(`
       INSERT INTO emails (
         id, message_id, thread_id, direction, folder,
@@ -163,6 +103,73 @@ export async function handleIncomingEmail(
     ).run();
 
     console.log(`[Email Handler] Successfully saved email ${emailId} for ${recipientEmail} (from: ${senderEmail}) into Inbox!`);
+
+    // 6. THEN Process attachments (now foreign key email_id is guaranteed to exist!)
+    if (parsed.attachments && parsed.attachments.length > 0) {
+      for (const att of parsed.attachments) {
+        try {
+          const attachmentId = crypto.randomUUID();
+          const safeFilename = (att.filename || 'attachment').replace(/[^a-zA-Z0-9._-]/g, '_');
+          const r2Key = `attachments/${emailId}/${attachmentId}_${safeFilename}`;
+          const contentType = att.mimeType || 'application/octet-stream';
+          let size = 0;
+          let base64Content: string | null = null;
+
+          if (typeof att.content === 'string') {
+            size = new TextEncoder().encode(att.content).length;
+            base64Content = btoa(att.content);
+          } else if (att.content instanceof Uint8Array) {
+            size = att.content.byteLength;
+            let binary = '';
+            const bytes = att.content;
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+              binary += String.fromCharCode(bytes[i]);
+            }
+            base64Content = btoa(binary);
+          } else if (att.content && 'byteLength' in att.content) {
+            const bytes = new Uint8Array(att.content as ArrayBuffer);
+            size = bytes.byteLength;
+            let binary = '';
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+              binary += String.fromCharCode(bytes[i]);
+            }
+            base64Content = btoa(binary);
+          }
+
+          if (env.ATTACHMENTS_BUCKET) {
+            try {
+              await env.ATTACHMENTS_BUCKET.put(r2Key, att.content, {
+                httpMetadata: { contentType }
+              });
+            } catch (r2AttErr) {
+              console.warn(`[R2 Warning] Could not save attachment ${safeFilename}:`, r2AttErr);
+            }
+          }
+
+          await env.DB.prepare(`
+            INSERT INTO attachments (id, email_id, filename, content_type, size, r2_key, content_id, data, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            attachmentId,
+            emailId,
+            att.filename || 'attachment',
+            contentType,
+            size,
+            r2Key,
+            att.contentId || null,
+            base64Content,
+            now
+          ).run();
+
+          console.log(`[Email Handler] Saved attachment ${safeFilename} (${size} bytes) for email ${emailId}`);
+        } catch (attErr) {
+          console.error(`[Email Handler Attachment Error] Failed to save attachment:`, attErr);
+        }
+      }
+    }
+
   } catch (error: any) {
     console.error(`[Email Handler Error for ID ${emailId}]:`, error);
   }

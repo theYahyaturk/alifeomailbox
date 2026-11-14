@@ -1472,7 +1472,13 @@ export function renderWebmailApp(): string {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        const data = await res.json();
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (jsonErr) {
+          data = { success: false, error: text || 'Server error' };
+        }
         if (res.ok && data.success) {
           closeCompose();
           alert('Email sent successfully!');
