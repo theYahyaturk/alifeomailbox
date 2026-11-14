@@ -137,7 +137,8 @@ app.post('/api/auth/login', async (c) => {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role
+        role: user.role,
+        avatar: user.avatar
       }
     });
   } catch (err: any) {
@@ -168,7 +169,7 @@ app.use('/api/*', async (c, next) => {
 app.get('/api/auth/me', async (c) => {
   const jwtUser = c.get('user');
   const user = await c.env.DB.prepare(
-    'SELECT id, email, name, role, created_at FROM users WHERE id = ?'
+    'SELECT id, email, name, role, avatar, created_at FROM users WHERE id = ?'
   ).bind(jwtUser.sub).first<any>();
 
   let aliases = await c.env.DB.prepare(
@@ -189,6 +190,27 @@ app.get('/api/auth/me', async (c) => {
     user,
     aliases: aliasList
   });
+});
+
+app.post('/api/user/avatar', async (c) => {
+  const jwtUser = c.get('user');
+  const body = await c.req.json().catch(() => ({}));
+  const avatar = body.avatar; // base64 string or null/empty to remove
+
+  if (avatar && typeof avatar !== 'string') {
+    return c.json({ error: 'Invalid avatar data' }, 400);
+  }
+
+  // Size limit: max 500KB
+  if (avatar && avatar.length > 500000) {
+    return c.json({ error: 'Avatar image too large. Max size 500KB.' }, 400);
+  }
+
+  await c.env.DB.prepare(
+    'UPDATE users SET avatar = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).bind(avatar || null, jwtUser.sub).run();
+
+  return c.json({ success: true, avatar: avatar || null });
 });
 
 // -------------------------------------------------------------

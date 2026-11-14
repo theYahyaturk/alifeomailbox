@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_salt TEXT NOT NULL,
     name TEXT,
     role TEXT DEFAULT 'admin',
+    avatar TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

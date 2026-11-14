@@ -236,12 +236,22 @@ export function renderWebmailApp(): string {
 
       <div class="h-5 w-px bg-gray-200"></div>
 
-      <!-- User Profile Pill -->
+      <!-- User Profile Pill & DP -->
       <div class="flex items-center space-x-2">
         <div class="text-right hidden sm:block">
           <div id="user-display-name" class="text-xs font-semibold text-gray-900">Loading...</div>
           <div id="user-display-email" class="text-[11px] text-gray-500 font-mono">...</div>
         </div>
+        <!-- Profile Avatar Button with Camera Badge -->
+        <button id="profile-avatar-btn" title="Change Profile DP" class="relative group cursor-pointer focus:outline-none shrink-0">
+          <div id="header-avatar" class="w-9 h-9 rounded-full bg-[#084328] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs overflow-hidden border border-gray-200">
+            <span id="header-avatar-initials">Y</span>
+            <img id="header-avatar-img" class="hidden w-full h-full object-cover" src="" alt="Profile Photo">
+          </div>
+          <div class="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-white text-[#084328] shadow border border-gray-200 flex items-center justify-center opacity-80 group-hover:opacity-100 transition">
+            <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </div>
+        </button>
         <button id="logout-btn" title="Sign Out" class="p-2 rounded-full text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition active:scale-95">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
@@ -261,12 +271,25 @@ export function renderWebmailApp(): string {
       <!-- Mobile Drawer Close Header -->
       <div class="flex items-center justify-between md:hidden pb-3 border-b border-gray-200">
         <div class="flex items-center space-x-2">
-          <img src="/logoi.png?v=2" alt="Alifeo Mail" class="w-7 h-7 rounded-lg object-cover">
+          <img src="/logoi.png?v=2" alt="Alifeo" class="w-7 h-7 rounded-lg object-cover">
           <span class="text-[#084328] scale-90">${ALIFEO_SVG_LOGO}</span>
         </div>
         <button id="close-drawer-btn" class="p-1.5 rounded-lg text-gray-500 hover:text-gray-900">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
+      </div>
+
+      <!-- Drawer User Profile Card -->
+      <div id="drawer-user-card" class="p-3 bg-gray-50 border border-gray-200/80 rounded-2xl flex items-center space-x-3 cursor-pointer hover:bg-[#e8f5ee] transition">
+        <div id="drawer-avatar" class="w-10 h-10 rounded-full bg-[#084328] text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs overflow-hidden border border-gray-200">
+          <span id="drawer-avatar-initials">Y</span>
+          <img id="drawer-avatar-img" class="hidden w-full h-full object-cover" src="" alt="Profile Photo">
+        </div>
+        <div class="min-w-0 flex-1">
+          <div id="drawer-user-name" class="text-xs font-bold text-gray-900 truncate">Loading...</div>
+          <div id="drawer-user-email" class="text-[10px] text-gray-500 font-mono truncate">...</div>
+          <div class="text-[9px] text-[#084328] font-semibold mt-0.5">Tap to change DP &bull; Profile</div>
+        </div>
       </div>
 
       <!-- Compose Button (Clean Forest Green Pill) -->
@@ -689,6 +712,58 @@ export function renderWebmailApp(): string {
     </div>
   </div>
 
+  <!-- Profile & Avatar Upload Modal -->
+  <div id="profile-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+    <div class="w-full max-w-sm bg-white border border-gray-200 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+      <!-- Modal Header -->
+      <div class="px-5 py-4 bg-[#084328] border-b border-[#06331e] flex items-center justify-between">
+        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+          <span>Profile Picture</span>
+        </h3>
+        <button id="close-profile-modal-btn" class="p-1 rounded-lg text-gray-300 hover:text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-6 flex flex-col items-center text-center space-y-4">
+        <!-- Big Preview Circle -->
+        <div class="relative group cursor-pointer" id="avatar-preview-wrapper">
+          <div id="modal-avatar" class="w-24 h-24 rounded-full bg-[#084328] text-white flex items-center justify-center font-bold text-2xl shadow-md overflow-hidden border-2 border-white ring-2 ring-[#084328]/20">
+            <span id="modal-avatar-initials">Y</span>
+            <img id="modal-avatar-img" class="hidden w-full h-full object-cover" src="" alt="Profile Photo">
+          </div>
+          <label for="avatar-file-input" class="absolute inset-0 rounded-full bg-black/40 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <span class="text-[9px] font-bold mt-1">Upload</span>
+          </label>
+        </div>
+
+        <div>
+          <div id="modal-user-name" class="font-bold text-base text-gray-900"></div>
+          <div id="modal-user-email" class="text-xs text-gray-500 font-mono mt-0.5"></div>
+        </div>
+
+        <!-- Hidden File Input -->
+        <input type="file" id="avatar-file-input" accept="image/*" class="hidden">
+
+        <!-- Actions -->
+        <div class="w-full space-y-2 pt-2">
+          <label for="avatar-file-input" class="w-full py-2.5 px-4 rounded-full bg-[#084328] hover:bg-[#06331e] text-white font-semibold text-xs shadow-xs transition flex items-center justify-center space-x-2 cursor-pointer">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            <span>Upload New Photo</span>
+          </label>
+
+          <button id="remove-avatar-btn" type="button" class="w-full py-2.5 px-4 rounded-full bg-gray-100 hover:bg-rose-50 text-gray-700 hover:text-rose-600 font-semibold text-xs transition border border-gray-200">
+            Remove Photo
+          </button>
+        </div>
+
+        <p class="text-[10px] text-gray-400">JPG, PNG or WEBP. Automatically resized & optimized.</p>
+      </div>
+    </div>
+  </div>
+
   <!-- Client-side Application Script -->
   <script>
     let state = {
@@ -796,9 +871,169 @@ export function renderWebmailApp(): string {
         }
 
         renderAliases();
+        updateUserAvatarUI();
       } catch (e) {
         console.error('Failed to fetch user:', e);
       }
+    }
+
+    // Profile Modal & Avatar Management
+    const profileModal = document.getElementById('profile-modal');
+    const profileAvatarBtn = document.getElementById('profile-avatar-btn');
+    const drawerUserCard = document.getElementById('drawer-user-card');
+    const closeProfileModalBtn = document.getElementById('close-profile-modal-btn');
+    const avatarFileInput = document.getElementById('avatar-file-input');
+    const removeAvatarBtn = document.getElementById('remove-avatar-btn');
+
+    function openProfileModal() {
+      if (!state.user) return;
+      document.getElementById('modal-user-name').textContent = state.user.name || state.user.email.split('@')[0];
+      document.getElementById('modal-user-email').textContent = state.user.email;
+      updateUserAvatarUI();
+      profileModal.classList.remove('hidden');
+      toggleDrawer(false);
+    }
+
+    function closeProfileModal() {
+      profileModal.classList.add('hidden');
+    }
+
+    if (profileAvatarBtn) profileAvatarBtn.onclick = () => openProfileModal();
+    if (drawerUserCard) drawerUserCard.onclick = () => openProfileModal();
+    if (closeProfileModalBtn) closeProfileModalBtn.onclick = () => closeProfileModal();
+
+    function updateUserAvatarUI() {
+      if (!state.user) return;
+      const avatar = state.user.avatar;
+      const initials = (state.user.name || state.user.email || '?').slice(0, 2).toUpperCase();
+
+      // Drawer user info
+      const drawerUserName = document.getElementById('drawer-user-name');
+      const drawerUserEmail = document.getElementById('drawer-user-email');
+      if (drawerUserName) drawerUserName.textContent = state.user.name || state.user.email.split('@')[0];
+      if (drawerUserEmail) drawerUserEmail.textContent = state.user.email;
+
+      // Header Avatar
+      const headerInitials = document.getElementById('header-avatar-initials');
+      const headerImg = document.getElementById('header-avatar-img');
+      if (headerInitials && headerImg) {
+        if (avatar) {
+          headerImg.src = avatar;
+          headerImg.classList.remove('hidden');
+          headerInitials.classList.add('hidden');
+        } else {
+          headerInitials.textContent = initials;
+          headerInitials.classList.remove('hidden');
+          headerImg.classList.add('hidden');
+        }
+      }
+
+      // Drawer Avatar
+      const drawerInitials = document.getElementById('drawer-avatar-initials');
+      const drawerImg = document.getElementById('drawer-avatar-img');
+      if (drawerInitials && drawerImg) {
+        if (avatar) {
+          drawerImg.src = avatar;
+          drawerImg.classList.remove('hidden');
+          drawerInitials.classList.add('hidden');
+        } else {
+          drawerInitials.textContent = initials;
+          drawerInitials.classList.remove('hidden');
+          drawerImg.classList.add('hidden');
+        }
+      }
+
+      // Modal Avatar
+      const modalInitials = document.getElementById('modal-avatar-initials');
+      const modalImg = document.getElementById('modal-avatar-img');
+      if (modalInitials && modalImg) {
+        if (avatar) {
+          modalImg.src = avatar;
+          modalImg.classList.remove('hidden');
+          modalInitials.classList.add('hidden');
+        } else {
+          modalInitials.textContent = initials;
+          modalInitials.classList.remove('hidden');
+          modalImg.classList.add('hidden');
+        }
+      }
+    }
+
+    if (avatarFileInput) {
+      avatarFileInput.onchange = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = async () => {
+            const canvas = document.createElement('canvas');
+            const MAX_SIZE = 256;
+            let width = img.width;
+            let height = img.height;
+            if (width > height) {
+              if (width > MAX_SIZE) {
+                height = Math.round((height * MAX_SIZE) / width);
+                width = MAX_SIZE;
+              }
+            } else {
+              if (height > MAX_SIZE) {
+                width = Math.round((width * MAX_SIZE) / height);
+                height = MAX_SIZE;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+            try {
+              const res = await fetch('/api/user/avatar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ avatar: dataUrl })
+              });
+              const data = await res.json();
+              if (res.ok && data.success) {
+                state.user.avatar = dataUrl;
+                updateUserAvatarUI();
+                alert('Profile picture updated successfully!');
+                closeProfileModal();
+              } else {
+                alert('Failed to update picture: ' + (data.error || 'Error'));
+              }
+            } catch (err) {
+              alert('Network error updating profile picture');
+            }
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      };
+    }
+
+    if (removeAvatarBtn) {
+      removeAvatarBtn.onclick = async () => {
+        if (!confirm('Remove your profile picture?')) return;
+        try {
+          const res = await fetch('/api/user/avatar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ avatar: null })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            state.user.avatar = null;
+            updateUserAvatarUI();
+            alert('Profile picture removed.');
+            closeProfileModal();
+          }
+        } catch (err) {
+          alert('Network error removing photo');
+        }
+      };
     }
 
     function renderAliases() {
@@ -958,7 +1193,13 @@ export function renderWebmailApp(): string {
         document.getElementById('viewer-sender-name').textContent = email.sender_name || email.sender;
         document.getElementById('viewer-sender-email').textContent = \`<\${email.sender}>\`;
         document.getElementById('viewer-recipient').textContent = email.recipient;
-        document.getElementById('viewer-avatar').textContent = (email.sender_name || email.sender || '?').slice(0, 2).toUpperCase();
+        const viewerAvatarEl = document.getElementById('viewer-avatar');
+        const isSelf = email.sender.toLowerCase() === (state.user && state.user.email ? state.user.email.toLowerCase() : '');
+        if (isSelf && state.user && state.user.avatar) {
+          viewerAvatarEl.innerHTML = \`<img src="\${state.user.avatar}" class="w-full h-full rounded-full object-cover" alt="Avatar">\`;
+        } else {
+          viewerAvatarEl.textContent = (email.sender_name || email.sender || '?').slice(0, 2).toUpperCase();
+        }
         document.getElementById('viewer-download-eml').href = \`/api/emails/\${id}/raw\`;
 
         // Star state

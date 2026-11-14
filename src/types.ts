@@ -18,6 +18,7 @@ export interface User {
   password_salt: string;
   name: string | null;
   role: 'admin' | 'user';
+  avatar?: string | null;
   created_at: string;
   updated_at: string;
 }
