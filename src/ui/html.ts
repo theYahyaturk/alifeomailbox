@@ -1445,11 +1445,12 @@ export function renderWebmailApp(): string {
       }
 
       const rawBody = document.getElementById('compose-body').value;
-      const formattedHtml = rawBody
-        .split('\\n\\n')
-        .map(function(p) { return '<p style="margin: 0 0 16px 0;">' + escapeHtml(p).replace(/\\n/g, '<br>') + '</p>'; })
-        .join('');
-      const fullHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #1f2937; margin: 0; padding: 12px 0;">' + formattedHtml + '</body></html>';
+      const nl = String.fromCharCode(10);
+      const paragraphs = rawBody.split(nl + nl);
+      const formattedHtml = paragraphs.map(function(p) {
+        return '<p style="margin: 0 0 16px 0;">' + escapeHtml(p).split(nl).join('<br>') + '</p>';
+      }).join('');
+      const fullHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #1f2937; margin: 0; padding: 12px 0;">' + formattedHtml + '</body></html>';
 
       const payload = {
         from: fromAddress,
