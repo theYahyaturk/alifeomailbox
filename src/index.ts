@@ -244,12 +244,15 @@ app.get('/api/emails', async (c) => {
   // Mailbox isolation: users only see their own emails
   if (jwtUser.role !== 'admin' || alias || c.req.query('all') !== 'true') {
     if (alias) {
-      query += ' AND (recipient = ? OR sender = ?)';
-      params.push(alias.toLowerCase(), alias.toLowerCase());
+      const cleanAlias = alias.toLowerCase().trim();
+      query += ' AND (recipient = ? OR sender = ? OR recipient LIKE ? OR cc LIKE ?)';
+      params.push(cleanAlias, cleanAlias, `%${cleanAlias}%`, `%${cleanAlias}%`);
     } else {
-      const placeholders = userAddresses.map(() => '?').join(', ');
-      query += ` AND (recipient IN (${placeholders}) OR sender IN (${placeholders}))`;
-      params.push(...userAddresses, ...userAddresses);
+      const orClauses = userAddresses.map(() => '(recipient = ? OR sender = ? OR recipient LIKE ? OR cc LIKE ?)');
+      query += ` AND (${orClauses.join(' OR ')})`;
+      for (const addr of userAddresses) {
+        params.push(addr, addr, `%${addr}%`, `%${addr}%`);
+      }
     }
   }
 
@@ -268,9 +271,11 @@ app.get('/api/emails', async (c) => {
   let unreadQuery = 'SELECT COUNT(*) as count FROM emails WHERE folder = "inbox" AND is_read = 0';
   const unreadParams: any[] = [];
   if (jwtUser.role !== 'admin' || c.req.query('all') !== 'true') {
-    const placeholders = userAddresses.map(() => '?').join(', ');
-    unreadQuery += ` AND recipient IN (${placeholders})`;
-    unreadParams.push(...userAddresses);
+    const orClauses = userAddresses.map(() => '(recipient = ? OR recipient LIKE ? OR cc LIKE ?)');
+    unreadQuery += ` AND (${orClauses.join(' OR ')})`;
+    for (const addr of userAddresses) {
+      unreadParams.push(addr, `%${addr}%`, `%${addr}%`);
+    }
   }
   const unreadCountRow = await c.env.DB.prepare(unreadQuery).bind(...unreadParams).first<{ count: number }>();
 
@@ -320,6 +325,10 @@ app.get('/api/emails/:id/attachments/:attId', async (c) => {
     return c.text('Attachment not found', 404);
   }
 
+  if (!c.env.ATTACHMENTS_BUCKET) {
+    return c.text('Attachment storage is not configured', 404);
+  }
+
   const object = await c.env.ATTACHMENTS_BUCKET.get(attachment.r2_key);
   if (!object) {
     return c.text('File not found in storage', 404);
@@ -343,6 +352,10 @@ app.get('/api/emails/:id/raw', async (c) => {
 
   if (!email || !email.raw_eml_key) {
     return c.text('Raw email not found', 404);
+  }
+
+  if (!c.env.ATTACHMENTS_BUCKET) {
+    return c.text('Raw email storage is not configured', 404);
   }
 
   const object = await c.env.ATTACHMENTS_BUCKET.get(email.raw_eml_key);
@@ -420,9 +433,11 @@ app.post('/api/emails/send', async (c) => {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      await c.env.ATTACHMENTS_BUCKET.put(r2Key, bytes.buffer, {
-        httpMetadata: { contentType: att.content_type || 'application/octet-stream' }
-      });
+      if (c.env.ATTACHMENTS_BUCKET) {
+        await c.env.ATTACHMENTS_BUCKET.put(r2Key, bytes.buffer, {
+          httpMetadata: { contentType: att.content_type || 'application/octet-stream' }
+        });
+      }
 
       await c.env.DB.prepare(`
         INSERT INTO attachments (id, email_id, filename, content_type, size, r2_key, created_at)
@@ -483,15 +498,16 @@ app.post('/api/emails/:id/trash', async (c) => {
   }
 
   if (email.folder === 'trash') {
-    // Delete attachments from R2
-    const attachments = await c.env.DB.prepare('SELECT r2_key FROM attachments WHERE email_id = ?').bind(id).all<any>();
-    if (attachments.results) {
-      for (const att of attachments.results) {
-        await c.env.ATTACHMENTS_BUCKET.delete(att.r2_key);
+    if (c.env.ATTACHMENTS_BUCKET) {
+      const attachments = await c.env.DB.prepare('SELECT r2_key FROM attachments WHERE email_id = ?').bind(id).all<any>();
+      if (attachments.results) {
+        for (const att of attachments.results) {
+          await c.env.ATTACHMENTS_BUCKET.delete(att.r2_key);
+        }
       }
-    }
-    if (email.raw_eml_key) {
-      await c.env.ATTACHMENTS_BUCKET.delete(email.raw_eml_key);
+      if (email.raw_eml_key) {
+        await c.env.ATTACHMENTS_BUCKET.delete(email.raw_eml_key);
+      }
     }
 
     // Delete records from DB

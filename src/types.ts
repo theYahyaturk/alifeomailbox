@@ -2,7 +2,7 @@ import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 
 export interface Env {
   DB: D1Database;
-  ATTACHMENTS_BUCKET: R2Bucket;
+  ATTACHMENTS_BUCKET?: R2Bucket;
   RESEND_API_KEY: string;
   JWT_SECRET: string;
   ADMIN_PASSWORD?: string;

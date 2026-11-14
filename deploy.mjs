@@ -160,23 +160,36 @@ async function main() {
       warn(`Catch-all rule notice: ${catchAllRes.errors?.[0]?.message || 'Configured'}`);
     }
 
-    // Step 7: Configure DNS Records (MX, SPF, DMARC)
-    log('Setting up DNS records for Cloudflare Email Routing & Resend...');
-    const dnsRecords = [
-      { type: 'MX', name: DOMAIN, content: 'mx1.mx.cloudflare.net', priority: 45 },
-      { type: 'MX', name: DOMAIN, content: 'mx2.mx.cloudflare.net', priority: 3 },
-      { type: 'MX', name: DOMAIN, content: 'mx3.mx.cloudflare.net', priority: 38 },
-      { type: 'TXT', name: DOMAIN, content: 'v=spf1 include:_spf.mx.cloudflare.net include:resend.com ~all' },
-      { type: 'TXT', name: `_dmarc.${DOMAIN}`, content: 'v=DMARC1; p=none; rua=mailto:dmarc-reports@' + DOMAIN }
-    ];
+    // Step 7: Ensure Clean DNS Records (MX, SPF, DMARC) without duplicates
+    log('Verifying DNS records for Cloudflare Email Routing & Resend...');
+    try {
+      const existingTxt = await cfApi(`/zones/${ZONE_ID}/dns_records?type=TXT`);
+      const txtList = existingTxt.result || [];
+      const hasSpf = txtList.some(r => r.name === DOMAIN && r.content && r.content.includes('v=spf1'));
+      if (!hasSpf) {
+        await cfApi(`/zones/${ZONE_ID}/dns_records`, 'POST', {
+          type: 'TXT',
+          name: DOMAIN,
+          content: 'v=spf1 include:_spf.mx.cloudflare.net include:resend.com ~all'
+        });
+        success('Created canonical SPF record.');
+      } else {
+        success('Canonical SPF record already configured.');
+      }
 
-    for (const record of dnsRecords) {
-      try {
-        const res = await cfApi(`/zones/${ZONE_ID}/dns_records`, 'POST', record);
-        if (res.success) {
-          success(`DNS ${record.type} record for ${record.name} created.`);
-        }
-      } catch {}
+      const hasDmarc = txtList.some(r => r.name.startsWith('_dmarc'));
+      if (!hasDmarc) {
+        await cfApi(`/zones/${ZONE_ID}/dns_records`, 'POST', {
+          type: 'TXT',
+          name: `_dmarc.${DOMAIN}`,
+          content: `v=DMARC1; p=none; rua=mailto:dmarc-reports@${DOMAIN}`
+        });
+        success('Created DMARC record.');
+      } else {
+        success('DMARC record already configured.');
+      }
+    } catch (dnsErr) {
+      warn(`DNS check notice: ${dnsErr.message}`);
     }
   }
 

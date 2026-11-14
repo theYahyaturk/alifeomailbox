@@ -11,27 +11,38 @@ export async function handleIncomingEmail(
   const now = new Date().toISOString();
 
   try {
+    console.log(`[Email Handler] New incoming email from "${message.from}" to "${message.to}"`);
+
     // 1. Read raw RFC822 email buffer
     const rawBuffer = await new Response(message.raw).arrayBuffer();
 
-    // 2. Backup raw .eml in Cloudflare R2
-    const rawEmlKey = `raw/${emailId}.eml`;
-    await env.ATTACHMENTS_BUCKET.put(rawEmlKey, rawBuffer, {
-      httpMetadata: { contentType: 'message/rfc822' },
-      customMetadata: {
-        from: message.from,
-        to: message.to,
-        timestamp: now
+    // 2. Backup raw .eml in Cloudflare R2 (optional if R2 is configured)
+    let rawEmlKey: string | null = null;
+    if (env.ATTACHMENTS_BUCKET) {
+      try {
+        rawEmlKey = `raw/${emailId}.eml`;
+        await env.ATTACHMENTS_BUCKET.put(rawEmlKey, rawBuffer, {
+          httpMetadata: { contentType: 'message/rfc822' },
+          customMetadata: {
+            from: message.from,
+            to: message.to,
+            timestamp: now
+          }
+        });
+      } catch (r2Err) {
+        console.warn(`[R2 Warning] Could not save raw EML:`, r2Err);
+        rawEmlKey = null;
       }
-    });
+    }
 
     // 3. Parse MIME with postal-mime
     const parser = new PostalMime();
     const parsed = await parser.parse(rawBuffer);
 
-    const senderEmail = parsed.from?.address || message.from;
+    // Clean sender and recipient emails (strip brackets, trim, lowercase)
+    let senderEmail = (parsed.from?.address || message.from || '').trim().toLowerCase().replace(/^[<"']+|[>"']+$/g, '');
     const senderName = parsed.from?.name || null;
-    const recipientEmail = message.to || (parsed.to && parsed.to[0]?.address) || 'yahya@alifeo.com';
+    let recipientEmail = (message.to || (parsed.to && parsed.to[0]?.address) || 'yahya@alifeo.com').trim().toLowerCase().replace(/^[<"']+|[>"']+$/g, '');
 
     const cc = parsed.cc ? parsed.cc.map(c => c.address).filter(Boolean).join(', ') : null;
     const bcc = parsed.bcc ? parsed.bcc.map(b => b.address).filter(Boolean).join(', ') : null;
@@ -48,7 +59,7 @@ export async function handleIncomingEmail(
     const hasAttachments = parsed.attachments && parsed.attachments.length > 0 ? 1 : 0;
     const threadId = parsed.messageId || emailId;
 
-    // 4. Process and store attachments in R2 and D1
+    // 4. Process attachments (save to R2 if bucket exists)
     if (parsed.attachments && parsed.attachments.length > 0) {
       for (const att of parsed.attachments) {
         const attachmentId = crypto.randomUUID();
@@ -64,12 +75,16 @@ export async function handleIncomingEmail(
           size = (att.content as ArrayBuffer).byteLength;
         }
 
-        // Store attachment binary in R2
-        await env.ATTACHMENTS_BUCKET.put(r2Key, att.content, {
-          httpMetadata: { contentType }
-        });
+        if (env.ATTACHMENTS_BUCKET) {
+          try {
+            await env.ATTACHMENTS_BUCKET.put(r2Key, att.content, {
+              httpMetadata: { contentType }
+            });
+          } catch (r2AttErr) {
+            console.warn(`[R2 Warning] Could not save attachment ${safeFilename}:`, r2AttErr);
+          }
+        }
 
-        // Insert into attachments table
         await env.DB.prepare(`
           INSERT INTO attachments (id, email_id, filename, content_type, size, r2_key, content_id, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -87,10 +102,10 @@ export async function handleIncomingEmail(
     }
 
     // 5. Ensure recipient alias exists for user filtering
-    const matchingUser = await env.DB.prepare('SELECT id FROM users WHERE email = ? LIMIT 1').bind(recipientEmail.toLowerCase()).first<{ id: string }>();
+    const matchingUser = await env.DB.prepare('SELECT id FROM users WHERE email = ? LIMIT 1').bind(recipientEmail).first<{ id: string }>();
     const targetUser = matchingUser || await env.DB.prepare('SELECT id FROM users WHERE role = "admin" LIMIT 1').first<{ id: string }>();
     if (targetUser) {
-      const aliasExists = await env.DB.prepare('SELECT id FROM aliases WHERE address = ?').bind(recipientEmail.toLowerCase()).first();
+      const aliasExists = await env.DB.prepare('SELECT id FROM aliases WHERE address = ?').bind(recipientEmail).first();
       if (!aliasExists) {
         const aliasId = `alias_${crypto.randomUUID().slice(0, 8)}`;
         const localPart = recipientEmail.split('@')[0];
@@ -98,7 +113,7 @@ export async function handleIncomingEmail(
         await env.DB.prepare(`
           INSERT INTO aliases (id, user_id, address, display_name, is_default, created_at)
           VALUES (?, ?, ?, ?, 0, ?)
-        `).bind(aliasId, targetUser.id, recipientEmail.toLowerCase(), displayName, now).run();
+        `).bind(aliasId, targetUser.id, recipientEmail, displayName, now).run();
       }
     }
 
@@ -116,7 +131,7 @@ export async function handleIncomingEmail(
       threadId,
       senderEmail,
       senderName,
-      recipientEmail.toLowerCase(),
+      recipientEmail,
       cc,
       bcc,
       replyTo,
@@ -129,9 +144,9 @@ export async function handleIncomingEmail(
       now
     ).run();
 
+    console.log(`[Email Handler] Successfully saved email ${emailId} for ${recipientEmail} (from: ${senderEmail}) into Inbox!`);
   } catch (error: any) {
     console.error(`[Email Handler Error for ID ${emailId}]:`, error);
-    // Don't re-throw unless critical so Cloudflare does not bounce transiently if DB succeeded partially
   }
 }
 
