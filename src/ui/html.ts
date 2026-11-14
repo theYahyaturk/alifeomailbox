@@ -1444,14 +1444,21 @@ export function renderWebmailApp(): string {
         return;
       }
 
+      const rawBody = document.getElementById('compose-body').value;
+      const formattedHtml = rawBody
+        .split('\\n\\n')
+        .map(function(p) { return '<p style="margin: 0 0 16px 0;">' + escapeHtml(p).replace(/\\n/g, '<br>') + '</p>'; })
+        .join('');
+      const fullHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; color: #1f2937; margin: 0; padding: 12px 0;">' + formattedHtml + '</body></html>';
+
       const payload = {
         from: fromAddress,
         to: document.getElementById('compose-to').value,
         cc: document.getElementById('compose-cc').value || undefined,
         bcc: document.getElementById('compose-bcc').value || undefined,
         subject: document.getElementById('compose-subject').value,
-        text: document.getElementById('compose-body').value,
-        html: \`<pre style="font-family: sans-serif; white-space: pre-wrap;">\${escapeHtml(document.getElementById('compose-body').value)}</pre>\`,
+        text: rawBody,
+        html: fullHtml,
         attachments: state.composeAttachments.map(a => ({
           filename: a.filename,
           content: a.content
