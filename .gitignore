@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Production build & local cache
+dist/
+.wrangler/
+*.log
+
+# Sensitive environment credentials
+.env
+.env.local
+.env.production
+.env.*.local
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

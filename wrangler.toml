@@ -1,0 +1,24 @@
+name = "alifeo-mail"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+DOMAIN = "alifeo.com"
+APP_URL = "https://mail.alifeo.com"
+DEFAULT_FROM_NAME = "Yahya"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "alifeo-mail-db"
+database_id = "d5cc98a4-085e-4a7e-a5d1-7f3a5d05375d"
+
+[[r2_buckets]]
+binding = "ATTACHMENTS_BUCKET"
+bucket_name = "alifeo-mail-attachments"
+
+# Secrets required (configured via wrangler secret put or deploy script):
+# - RESEND_API_KEY
+# - JWT_SECRET
+# - ADMIN_PASSWORD
+
